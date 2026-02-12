@@ -20,17 +20,20 @@ export default function LoginPage() {
       if (error) throw error
 
       if (data?.user) {
-        // Fetch role
+        // Fetch role from user_roles table
         const { data: roleData } = await supabase
           .from('user_roles')
           .select('role')
           .eq('id', data.user.id)
           .single()
 
-        // Role-based routing
+        // --- UPDATED ROLE-BASED ROUTING ---
         if (roleData?.role === 'HEAD') {
           window.location.assign('/dashboard/analytics')
+        } else if (roleData?.role === 'GSO') {
+          window.location.assign('/dashboard/gso')
         } else {
+          // Default for STAFF
           window.location.assign('/operations/dispatch')
         }
       }
