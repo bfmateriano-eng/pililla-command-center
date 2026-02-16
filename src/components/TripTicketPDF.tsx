@@ -1,5 +1,5 @@
 'use client'
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 
 // --- 1. STYLES ---
 const styles = StyleSheet.create({
@@ -34,12 +34,19 @@ const styles = StyleSheet.create({
   calcLabel: { fontSize: 7, width: '60%' },
   calcValue: { borderBottom: '0.5pt solid #000', flex: 1, fontSize: 7, textAlign: 'center' },
 
-  signatureGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  sigBox: { width: '48%', textAlign: 'center' },
-  sigName: { fontSize: 8, fontWeight: 'bold', borderBottom: '0.5pt solid #000', marginTop: 8 },
+  signatureGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  sigBox: { width: '48%', textAlign: 'center', alignItems: 'center' },
+  sigName: { fontSize: 7, fontWeight: 'bold', borderBottom: '0.5pt solid #000', marginTop: 6, width: '100%', textAlign: 'center' },
   sigLabel: { fontSize: 6, marginTop: 1 },
 
-  divider: { borderTop: '1pt dashed #000', marginVertical: 8 }
+  eSignature: {
+    width: 50,
+    height: 'auto',
+    marginBottom: -12,
+    zIndex: 10
+  },
+
+  divider: { borderTop: '1pt dashed #000', marginVertical: 6 }
 })
 
 // --- 2. INTERNAL CONTENT COMPONENT ---
@@ -52,6 +59,10 @@ const TicketContent = ({ data, displayId }: { data: any, displayId: string }) =>
   const places = data.dispatch_logs?.flatMap((disp: any) => 
     disp.patient_manifest?.flatMap((p: any) => p.destinations?.map((dest: any) => dest.name))
   ).filter((v: any, i: any, a: any) => a.indexOf(v) === i).join('; ') || '';
+
+  // Logic for dynamic requested by and driver
+  const requestedBy = data.created_by_name || "COMMAND CENTER STAFF";
+  const driverName = data.drivers?.full_name || "ASSIGNED DRIVER";
 
   return (
     <View style={styles.column}>
@@ -75,9 +86,8 @@ const TicketContent = ({ data, displayId }: { data: any, displayId: string }) =>
       
       <Text style={styles.fieldLabel}>1. Name of authorized passenger/s:</Text>
       <View style={styles.manifestBox}>
-        <View style={styles.manifestLine}><Text style={styles.manifestText}>{patients.slice(0, 50)}</Text></View>
-        <View style={styles.manifestLine}><Text style={styles.manifestText}>{patients.slice(50, 100)}</Text></View>
-        <View style={styles.manifestLine}><Text style={styles.manifestText}>{patients.slice(100)}</Text></View>
+        <View style={styles.manifestLine}><Text style={styles.manifestText}>{patients.slice(0, 55)}</Text></View>
+        <View style={styles.manifestLine}><Text style={styles.manifestText}>{patients.slice(55, 110)}</Text></View>
       </View>
 
       <View style={{ flexDirection: 'row' }}>
@@ -87,27 +97,23 @@ const TicketContent = ({ data, displayId }: { data: any, displayId: string }) =>
 
       <View style={{ flexDirection: 'row' }}>
         <Text style={styles.fieldLabel}>3. Purpose of travel:</Text>
-        <Text style={[styles.fieldLine, { fontSize: 7, fontWeight: 'bold' }]}>MEDICAL EMERGENCY</Text>
+        <Text style={[styles.fieldLine, { fontSize: 7, fontWeight: 'bold' }]}>MEDICAL EMERGENCY / OFFICIAL MISSION</Text>
       </View>
 
       <Text style={styles.fieldLabel}>4. Place/s to be visited:</Text>
       <View style={styles.manifestLine}><Text style={styles.manifestText}>{places}</Text></View>
 
-      <View style={{ flexDirection: 'row' }}>
-        <Text style={styles.fieldLabel}>5. Expected duration of travel:</Text>
-        <Text style={styles.fieldLine}>AS NEEDED</Text>
-      </View>
-
       <View style={styles.signatureGrid}>
         <View style={styles.sigBox}>
           <Text style={styles.sigLabel}>Requested by:</Text>
-          <Text style={styles.sigName}> </Text>
-          <Text style={styles.sigLabel}>End-User</Text>
+          <Text style={styles.sigName}>{requestedBy.toUpperCase()}</Text>
+          <Text style={styles.sigLabel}>Command Center Staff</Text>
         </View>
         <View style={styles.sigBox}>
           <Text style={styles.sigLabel}>Recommending Approval:</Text>
-          <Text style={styles.sigName}>{" "}</Text>
-          <Text style={styles.sigLabel}>Dept. Head</Text>
+          <Image src="/signatures/joymee.png" style={styles.eSignature} />
+          <Text style={styles.sigName}>ENGR. JOYMEE VIDANES-LABISTE</Text>
+          <Text style={styles.sigLabel}>Head, Command Center</Text>
         </View>
       </View>
 
@@ -115,77 +121,58 @@ const TicketContent = ({ data, displayId }: { data: any, displayId: string }) =>
 
       <View style={styles.calcRow}>
         <Text style={styles.calcLabel}>1. Name of assigned driver:</Text>
-        <Text style={styles.calcValue}>{data.drivers?.full_name}</Text>
+        <Text style={styles.calcValue}>{driverName}</Text>
       </View>
       <View style={styles.calcRow}>
         <Text style={styles.calcLabel}>2. Vehicle/Plate no.:</Text>
         <Text style={styles.calcValue}>{data.ambulances?.call_sign} / {data.ambulances?.plate_number}</Text>
       </View>
-      <View style={styles.calcRow}>
-        <Text style={styles.calcLabel}>3. Approved purchase of gasoline:</Text>
-        <Text style={styles.calcValue}>PHP {data.total_amount?.toLocaleString()}</Text>
-      </View>
       
-      <Text style={styles.fieldLabel}>4. Gasoline/Oil consumed:</Text>
-      <View style={[styles.calcRow, { paddingLeft: 10 }]}>
-        <Text style={styles.calcLabel}>   Bal. per fuel gauge before this travel:</Text>
-        <Text style={styles.calcValue}>{" "}</Text>
-      </View>
+      <Text style={styles.fieldLabel}>3. Gasoline/Oil consumption status:</Text>
       <View style={[styles.calcRow, { paddingLeft: 10 }]}>
         <Text style={styles.calcLabel}>   Add: Purchase, this travel:</Text>
-        <Text style={styles.calcValue}>{data.actual_liters} L</Text>
+        <Text style={styles.calcValue}>{data.actual_liters || '___'} L</Text>
       </View>
       <View style={[styles.calcRow, { paddingLeft: 10 }]}>
-        <Text style={styles.calcLabel}>   Total:</Text>
-        <Text style={styles.calcValue}>{" "}</Text>
+        <Text style={styles.calcLabel}>   Total Cost:</Text>
+        <Text style={styles.calcValue}>₱ {data.total_amount?.toLocaleString() || '___'}</Text>
       </View>
-      <View style={[styles.calcRow, { paddingLeft: 10 }]}>
-        <Text style={styles.calcLabel}>   Less: Consumed, this travel:</Text>
-        <Text style={styles.calcValue}>{" "}</Text>
-      </View>
-      <View style={[styles.calcRow, { paddingLeft: 10 }]}>
-        <Text style={styles.calcLabel}>   Bal. per fuel gauge after this travel:</Text>
-        <Text style={styles.calcValue}>{" "}</Text>
-      </View>
-
-      <Text style={[styles.fieldLabel, { fontSize: 6, marginTop: 4 }]}>5. Certifies that the assigned car is in sound running condition</Text>
 
       <View style={styles.signatureGrid}>
         <View style={styles.sigBox}>
-          <Text style={styles.sigLabel}>Approved by:</Text>
-          <Text style={styles.sigName}> </Text>
-          <Text style={styles.sigLabel}>Dispatcher</Text>
+          <Text style={styles.sigLabel}>Reviewed by:</Text>
+          <Text style={styles.sigName}>RONNEL CASTELO</Text>
+          <Text style={styles.sigLabel}>Dispatcher, GSO</Text>
         </View>
         <View style={styles.sigBox}>
           <Text style={styles.sigLabel}>Approved by:</Text>
-          <Text style={styles.sigName}> </Text>
-          <Text style={styles.sigLabel}>GSO Head</Text>
+          <Image src="/signatures/bossv.png" style={styles.eSignature} />
+          <Text style={styles.sigName}>ENGR. ELIGIO D. VILLAREAL</Text>
+          <Text style={styles.sigLabel}>Head, GSO</Text>
         </View>
       </View>
 
       <View style={styles.divider} />
 
       <Text style={styles.sectionHeader}>C. To be filled-up by the driver:</Text>
-      <View style={styles.calcRow}><Text style={styles.calcLabel}>1. Time of departure from office/garage:</Text><Text style={styles.calcValue}>{" "}</Text></View>
-      <View style={styles.calcRow}><Text style={styles.calcLabel}>2. Time of arrival to office/garage:</Text><Text style={styles.calcValue}>{" "}</Text></View>
-      <View style={styles.calcRow}><Text style={styles.calcLabel}>3. Approximate actual time and distance travelled:</Text><Text style={styles.calcValue}>{" "}</Text></View>
-      
-      <View style={[styles.calcRow, { marginTop: 4 }]}>
-        <Text style={styles.calcLabel}>4. Odometer reading: Beg of trip:</Text>
-        <Text style={[styles.calcValue, { flex: 0, width: 40 }]}>{data.odometer_reading}</Text>
-        <Text style={[styles.calcLabel, { width: 'auto', marginLeft: 10 }]}>End of trip:</Text>
-        <Text style={styles.calcValue}>{" "}</Text>
+      <View style={styles.calcRow}>
+        <Text style={styles.calcLabel}>1. Odometer reading: Beg of trip:</Text>
+        <Text style={styles.calcValue}>{data.odometer_reading}</Text>
       </View>
-
+      <View style={styles.calcRow}>
+        <Text style={styles.calcLabel}>2. Odometer reading: End of trip:</Text>
+        <Text style={styles.calcValue}> </Text>
+      </View>
+      
       <View style={styles.signatureGrid}>
         <View style={styles.sigBox}>
-          <Text style={styles.sigLabel}>Certified correct:</Text>
-          <Text style={[styles.sigName, { marginTop: 12 }]}>{" "}</Text>
+          <Text style={styles.sigLabel}>Certified Correct:</Text>
+          <Text style={[styles.sigName, { marginTop: 12 }]}>{driverName.toUpperCase()}</Text>
           <Text style={styles.sigLabel}>Driver</Text>
         </View>
         <View style={styles.sigBox}>
-          <Text style={styles.sigLabel}>Certified correct:</Text>
-          <Text style={[styles.sigName, { marginTop: 12 }]}>{" "}</Text>
+          <Text style={styles.sigLabel}>Certified Correct:</Text>
+          <Text style={[styles.sigName, { marginTop: 12 }]}> </Text>
           <Text style={styles.sigLabel}>Dispatcher</Text>
         </View>
       </View>
@@ -195,7 +182,6 @@ const TicketContent = ({ data, displayId }: { data: any, displayId: string }) =>
 
 // --- 3. MAIN EXPORTED DOCUMENT ---
 export const TripTicketDocument = ({ data, missionIndex }: { data: any, missionIndex: number }) => {
-  // Logic to create the sequential ID based on the date provided in the PO
   const subNumber = missionIndex.toString().padStart(2, '0');
   const fullTrackingId = `${data?.tracking_id || 'PENDING'}-${subNumber}`;
 

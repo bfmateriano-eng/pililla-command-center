@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Sidebar from '@/components/Sidebar'
-import { PDFDownloadLink, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
-import { Check, X, FileCheck, Clock, Loader2, Award } from 'lucide-react'
+import { PDFDownloadLink, Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { Check, X, FileCheck, Clock, Loader2, Award, User } from 'lucide-react'
 
 // --- 1. STRICT TYPES ---
 interface Ambulance {
@@ -23,9 +23,16 @@ interface FuelRequest {
   odometer_reading: number;
   approved_at: string | null;
   created_at: string;
+  approved_by_name: string | null; // New field for dynamic approver
   ambulances: Ambulance;
   drivers: Driver;
 }
+
+// Approver Options Constant
+const APPROVERS = [
+  { name: 'Engr. Joymee Vidanes-Labiste', title: 'Head, Command Center', file: 'joymee.png' },
+  { name: 'Engr. Eligio D. Villareal', title: 'Head, GSO', file: 'bossv.png' }
+];
 
 // --- 2. PDF STYLING ---
 const styles = StyleSheet.create({
@@ -92,10 +99,17 @@ const styles = StyleSheet.create({
   driverName: { fontSize: 7, fontWeight: 'bold', textTransform: 'uppercase' },
 
   adminSignature: { 
-    marginTop: 15, 
+    marginTop: 10, 
     textAlign: 'center', 
     borderTop: '0.5pt solid #000', 
-    paddingTop: 3 
+    paddingTop: 3,
+    alignItems: 'center'
+  },
+  eSignature: {
+    width: 60,
+    height: 'auto',
+    marginBottom: -15, // Overlap slightly with name for realism
+    zIndex: 10
   },
   copyLabel: { 
     marginTop: 5, 
@@ -107,63 +121,73 @@ const styles = StyleSheet.create({
 })
 
 // --- 3. PDF COMPONENTS ---
-export const POSlipPDF = ({ data, copyLabel }: { data: FuelRequest, copyLabel: string }) => (
-  <View style={styles.quadrant}>
-    <View style={styles.header}>
-      <Text>REGION IV-A CALABARZON</Text>
-      <Text>Province of Rizal</Text>
-      <Text>Municipal Government of Pililla</Text>
-    </View>
-    <Text style={styles.controlNo}>Control No: {data.tracking_id}</Text>
-    <Text style={styles.title}>PURCHASE ORDER SLIP</Text>
-    <View style={styles.infoSection}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Date Approved:</Text>
-        <Text style={styles.value}>{data.approved_at ? new Date(data.approved_at).toLocaleDateString() : 'PENDING'}</Text>
+export const POSlipPDF = ({ data, copyLabel }: { data: FuelRequest, copyLabel: string }) => {
+  // Determine which signature and title to show based on data.approved_by_name
+  const approver = APPROVERS.find(a => a.name === data.approved_by_name) || APPROVERS[0];
+
+  return (
+    <View style={styles.quadrant}>
+      <View style={styles.header}>
+        <Text>REGION IV-A CALABARZON</Text>
+        <Text>Province of Rizal</Text>
+        <Text>Municipal Government of Pililla</Text>
       </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Plate No / Call Sign:</Text>
-        <Text style={styles.value}>{data.ambulances?.plate_number} / {data.ambulances?.call_sign}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Requested Odometer:</Text>
-        <Text style={styles.value}>{data.odometer_reading} km</Text>
-      </View>
-    </View>
-    <View style={styles.table}>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.tableCell, { width: '20%' }]}>QTY (L)</Text>
-        <Text style={[styles.tableCell, { width: '40%' }]}>PRODUCT</Text>
-        <Text style={[styles.tableCell, { width: '40%', borderRight: 0 }]}>TOTAL AMOUNT</Text>
-      </View>
-      <View style={styles.tableRow}>
-        <Text style={[styles.tableCell, { width: '20%' }]}></Text>
-        <Text style={[styles.tableCell, { width: '40%', fontSize: 8, fontWeight: 'bold' }]}>{data.fuel_product}</Text>
-        <Text style={[styles.tableCell, { width: '40%', borderRight: 0 }]}></Text>
-      </View>
-    </View>
-    <View style={styles.signatureSection}>
-      <View style={styles.sigBox}>
-        <Text style={styles.driverName}>{data.drivers?.full_name}</Text>
-        <View style={styles.sigLine}>
-          <Text style={styles.sigText}>Requesting Driver Signature</Text>
+      <Text style={styles.controlNo}>Control No: {data.tracking_id}</Text>
+      <Text style={styles.title}>PURCHASE ORDER SLIP</Text>
+      <View style={styles.infoSection}>
+        <View style={styles.row}>
+          <Text style={styles.label}>Date Approved:</Text>
+          <Text style={styles.value}>{data.approved_at ? new Date(data.approved_at).toLocaleDateString() : 'PENDING'}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Plate No / Call Sign:</Text>
+          <Text style={styles.value}>{data.ambulances?.plate_number} / {data.ambulances?.call_sign}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Requested Odometer:</Text>
+          <Text style={styles.value}>{data.odometer_reading} km</Text>
         </View>
       </View>
-      <View style={styles.sigBox}>
-        <Text style={styles.driverName}>{" "}</Text>
-        <View style={styles.sigLine}>
-          <Text style={styles.sigText}>Gas Station Personnel</Text>
+      <View style={styles.table}>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.tableCell, { width: '20%' }]}>QTY (L)</Text>
+          <Text style={[styles.tableCell, { width: '40%' }]}>PRODUCT</Text>
+          <Text style={[styles.tableCell, { width: '40%', borderRight: 0 }]}>TOTAL AMOUNT</Text>
+        </View>
+        <View style={styles.tableRow}>
+          <Text style={[styles.tableCell, { width: '20%' }]}></Text>
+          <Text style={[styles.tableCell, { width: '40%', fontSize: 8, fontWeight: 'bold' }]}>{data.fuel_product}</Text>
+          <Text style={[styles.tableCell, { width: '40%', borderRight: 0 }]}></Text>
         </View>
       </View>
+      <View style={styles.signatureSection}>
+        <View style={styles.sigBox}>
+          <Text style={styles.driverName}>{data.drivers?.full_name}</Text>
+          <View style={styles.sigLine}>
+            <Text style={styles.sigText}>Requesting Driver Signature</Text>
+          </View>
+        </View>
+        <View style={styles.sigBox}>
+          <Text style={styles.driverName}>{" "}</Text>
+          <View style={styles.sigLine}>
+            <Text style={styles.sigText}>Gas Station Personnel</Text>
+          </View>
+        </View>
+      </View>
+      
+      <View style={styles.adminSignature}>
+        {/* E-SIGNATURE IMAGE */}
+        <Image 
+          src={`/signatures/${approver.file}`} 
+          style={styles.eSignature} 
+        />
+        <Text style={{ fontSize: 8, fontWeight: 'bold' }}>{approver.name.toUpperCase()}</Text>
+        <Text style={{ fontSize: 6 }}>{approver.title} / Approving Officer</Text>
+      </View>
+      <Text style={styles.copyLabel}>*** {copyLabel} ***</Text>
     </View>
-    <View style={styles.adminSignature}>
-      <Text style={{ fontSize: 8, fontWeight: 'bold' }}>ENGR. JOYMEE VIDANES-LABISTE</Text>
-      <Text style={{ fontSize: 6 }}>Command Center Head / Approving Officer</Text>
-      <Text style={{ fontSize: 5, marginTop: 2, color: '#555' }}>Approved Electronically</Text>
-    </View>
-    <Text style={styles.copyLabel}>*** {copyLabel} ***</Text>
-  </View>
-)
+  );
+};
 
 export const MyDocument = ({ data }: { data: FuelRequest }) => (
   <Document>
@@ -181,6 +205,7 @@ export default function ApprovalsPage() {
   const [requests, setRequests] = useState<FuelRequest[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [authorized, setAuthorized] = useState<boolean>(false)
+  const [selectedApprover, setSelectedApprover] = useState(APPROVERS[0].name)
 
   useEffect(() => {
     async function checkAccess() {
@@ -223,7 +248,8 @@ export default function ApprovalsPage() {
       .from('fuel_requests')
       .update({ 
         status: newStatus,
-        approved_at: newStatus === 'Approved' ? new Date().toISOString() : null 
+        approved_at: newStatus === 'Approved' ? new Date().toISOString() : null,
+        approved_by_name: newStatus === 'Approved' ? selectedApprover : null
       })
       .eq('id', id)
     
@@ -245,9 +271,8 @@ export default function ApprovalsPage() {
       <main className="ml-64 flex-1 p-8">
         
         {/* --- BRANDED HEADER --- */}
-        <div className="flex items-center justify-between mb-10 pb-6 border-b border-gray-200">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-10 pb-6 border-b border-gray-200 gap-6">
           <div className="flex items-center gap-4">
-            {/* LGU LOGO */}
             <img 
               src="/images/lgu-logo.png" 
               alt="Pililla LGU Logo" 
@@ -265,9 +290,20 @@ export default function ApprovalsPage() {
             </div>
           </div>
           
-          <div className="bg-white px-4 py-2 rounded-xl border shadow-sm flex items-center gap-2">
-            <Clock className="w-4 h-4 text-orange-500" />
-            <span className="text-xs font-black text-gray-700 uppercase">{requests.length} Pending Requests</span>
+          {/* APPROVER SELECTOR DROPDOWN */}
+          <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-2 w-full lg:w-80">
+            <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest block flex items-center gap-2">
+              <User className="w-3 h-3" /> Set Active Approver
+            </label>
+            <select 
+              value={selectedApprover}
+              onChange={(e) => setSelectedApprover(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            >
+              {APPROVERS.map(app => (
+                <option key={app.name} value={app.name}>{app.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -321,8 +357,9 @@ export default function ApprovalsPage() {
                       <Check className="w-4 h-4 mr-2" /> Approve
                     </button>
                     
+                    {/* Pass the dynamic approver to the PDF link as well for review */}
                     <PDFDownloadLink 
-                      document={<MyDocument data={req} />} 
+                      document={<MyDocument data={{...req, approved_by_name: selectedApprover}} />} 
                       fileName={`PO-${req.tracking_id}.pdf`}
                       className="text-[10px] text-blue-600 text-center font-black uppercase tracking-tighter hover:text-blue-800 underline"
                     >

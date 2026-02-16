@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Sidebar from '@/components/Sidebar'
-import { Users, UserPlus, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
+import { Users, UserPlus, Loader2, Trash2, CheckCircle2, XCircle } from 'lucide-react'
 
 // --- 1. STRICT TYPES ---
 interface Driver {
@@ -95,7 +95,7 @@ export default function DriversPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
+    <div className="min-h-screen bg-[#f8fafc] flex text-slate-800">
       <Sidebar />
       
       <main className="ml-64 flex-1 p-8">
@@ -158,13 +158,17 @@ export default function DriversPage() {
                   <div className="flex items-center gap-4">
                     <button 
                       onClick={() => toggleStatus(driver.id, driver.is_active)}
-                      className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${
+                      className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center gap-2 ${
                         driver.is_active 
                           ? 'bg-green-600 text-white hover:bg-green-700' 
                           : 'bg-red-600 text-white hover:bg-red-700'
                       }`}
                     >
-                      {driver.is_active ? 'Eligible' : 'Off-duty'}
+                      {driver.is_active ? (
+                        <><CheckCircle2 className="w-3 h-3" /> Eligible</>
+                      ) : (
+                        <><XCircle className="w-3 h-3" /> Off-duty</>
+                      )}
                     </button>
                     <button 
                       onClick={() => deleteDriver(driver.id)}

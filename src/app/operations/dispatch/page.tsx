@@ -4,8 +4,10 @@ import { supabase } from '@/lib/supabaseClient'
 import Sidebar from '@/components/Sidebar'
 import { 
   Ambulance, Clock, User, Plus, MapPin, Activity, Save, Search, 
-  Edit2, X, Users, ArrowRight, Fuel, AlertCircle, Loader2, Calendar, Filter, CheckCircle2
+  Edit2, X, Users, ArrowRight, Fuel, AlertCircle, Loader2, Calendar, Filter, CheckCircle2, Printer
 } from 'lucide-react'
+import { PDFDownloadLink } from '@react-pdf/renderer'
+import { TripTicketDocument } from '@/components/TripTicketPDF'
 
 // TYPES
 type Destination = {
@@ -54,7 +56,7 @@ export default function DispatchPage() {
 
   useEffect(() => {
     loadData()
-  }, [statusFilter, dateFilter]) // Reload when filters change
+  }, [statusFilter, dateFilter])
 
   async function loadData() {
     setLoading(true)
@@ -62,19 +64,18 @@ export default function DispatchPage() {
       const { data: amb } = await supabase.from('ambulances').select('*').eq('is_active', true).order('call_sign')
       const { data: drv } = await supabase.from('drivers').select('*').eq('is_active', true).order('full_name')
       
-      // Fetch Approved/Closed POs (Removed 'dispatch_id is null' to allow multiple links per PO)
       const { data: fuel } = await supabase
         .from('fuel_requests')
         .select('id, tracking_id, fuel_product')
         .in('status', ['Approved', 'Closed'])
 
-      // Build Query with Filters
+      // Fetch dispatch logs with ambulance and driver info always present
       let query = supabase.from('dispatch_logs')
         .select(`
           *, 
-          ambulances(call_sign), 
+          ambulances(call_sign, plate_number), 
           drivers(full_name),
-          fuel_requests:linked_fuel_id(tracking_id, status) 
+          fuel_requests:linked_fuel_id(*) 
         `)
         .order('created_at', { ascending: false })
 
@@ -99,10 +100,8 @@ export default function DispatchPage() {
     }
   }
 
-  // --- LOGIC: LINK FUEL PO ---
   async function linkFuelToDispatch(dispatchId: string, fuelId: string, trackingId: string) {
     if (!fuelId) return
-    
     const confirmLink = window.confirm(`Confirm linking Fuel PO [${trackingId}] to this mission?`)
     if (!confirmLink) return
 
@@ -119,9 +118,8 @@ export default function DispatchPage() {
     }
   }
 
-  // --- LOGIC: CLOSE MISSION ---
   async function closeMission(dispatchId: string) {
-    const confirmClose = window.confirm("Are you sure you want to CLOSE this mission? This indicates all details are complete.")
+    const confirmClose = window.confirm("Are you sure you want to CLOSE this mission?")
     if (!confirmClose) return
 
     const { error } = await supabase
@@ -136,7 +134,6 @@ export default function DispatchPage() {
     }
   }
 
-  // Helper for Status UI
   function getStatusStyle(status: string) {
     switch (status) {
       case 'Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -146,7 +143,6 @@ export default function DispatchPage() {
     }
   }
 
-  // --- FORM HANDLERS ---
   async function handleSearch(query: string) {
     setPatientSearch(query); setCurrentPatient({ ...currentPatient, name: query }) 
     if (query.length > 2) {
@@ -205,19 +201,17 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-gray-100 flex text-slate-800">
       <Sidebar />
       <main className="ml-64 flex-1 p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* --- LEFT: MISSION BOARD --- */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center tracking-tight">
               <Activity className="w-7 h-7 mr-2 text-red-600" /> Mission Board
             </h2>
             
-            {/* --- FILTERS --- */}
-            <div className="flex items-center gap-3 bg-white p-2 rounded-lg shadow-sm border">
+            <div className="flex items-center gap-3 bg-white p-2 rounded-lg shadow-sm border text-slate-800">
               <div className="flex items-center text-gray-400 px-2 border-r">
                 <Calendar className="w-4 h-4 mr-2" />
                 <input 
@@ -247,12 +241,6 @@ export default function DispatchPage() {
             <div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
             <div className="space-y-4">
-              {dispatches.length === 0 && (
-                <div className="bg-white p-12 rounded-xl border-2 border-dashed border-gray-200 text-center">
-                  <p className="text-gray-400 italic">No missions found for this filter.</p>
-                </div>
-              )}
-
               {dispatches.map((dispatch) => (
                 <div key={dispatch.id} className={`bg-white border-l-8 ${dispatch.status === 'Closed' ? 'border-green-500' : 'border-red-500'} rounded-lg shadow-md p-5 relative transition-all hover:shadow-lg`}>
                   <div className="flex justify-between items-start">
@@ -280,43 +268,68 @@ export default function DispatchPage() {
                         ))}
                       </div>
 
-                      {/* --- ENLARGED LINKING UI --- */}
-                      <div className="mt-5 pt-4 border-t border-dashed flex flex-wrap items-center gap-4">
-                        {dispatch.fuel_requests ? (
-                          <div className="flex items-center bg-orange-50 text-orange-700 px-3 py-2 rounded-lg font-bold text-xs border border-orange-200">
-                            <Fuel className="w-4 h-4 mr-2" /> ATTACHED PO: {dispatch.fuel_requests.tracking_id}
-                          </div>
-                        ) : (
+                      {/* --- PRINTING & LINKING LOGIC (NO PO REQUIREMENT) --- */}
+                      <div className="mt-5 pt-4 border-t border-dashed flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          {/* PRINT BUTTON: Always visible */}
+                          <PDFDownloadLink 
+                            document={
+                              <TripTicketDocument 
+                                data={{
+                                  // Fallback to Dispatch details if no Fuel PO is linked
+                                  ...(dispatch.fuel_requests || { tracking_id: dispatch.tracking_id }), 
+                                  drivers: dispatch.drivers, 
+                                  ambulances: dispatch.ambulances,
+                                  dispatch_logs: [dispatch],
+                                  created_at: dispatch.created_at
+                                }} 
+                                missionIndex={1} 
+                              />
+                            } 
+                            fileName={`TripTicket-${dispatch.tracking_id}.pdf`}
+                            className="flex items-center gap-2 bg-blue-900 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-blue-800 transition-all shadow-md active:scale-95"
+                          >
+                            {({ loading }) => (
+                              loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Printer className="w-3 h-3" /> Print Trip Ticket</>
+                            )}
+                          </PDFDownloadLink>
+
+                          {dispatch.fuel_requests && (
+                            <div className="flex items-center bg-orange-50 text-orange-700 px-3 py-2 rounded-lg font-bold text-[10px] border border-orange-200 uppercase tracking-tight">
+                              <Fuel className="w-3.5 h-3.5 mr-2" /> Linked PO: {dispatch.fuel_requests.tracking_id}
+                            </div>
+                          )}
+                        </div>
+
+                        {!dispatch.fuel_requests && (
                           <div className="flex items-center gap-3 w-full sm:w-auto">
-                             <select 
-                                className="text-sm font-bold bg-blue-600 text-white rounded-lg px-4 py-2.5 outline-none cursor-pointer shadow-md hover:bg-blue-700 transition-colors flex-1 sm:flex-none"
+                              <select 
+                                className="text-[10px] font-black bg-white border border-gray-200 text-blue-600 rounded-lg px-3 py-1.5 outline-none cursor-pointer hover:bg-blue-50 transition-colors flex-1 sm:flex-none uppercase"
                                 onChange={(e) => {
                                   const selected = availableFuelSlips.find(s => s.id === e.target.value);
                                   if(selected) linkFuelToDispatch(dispatch.id, selected.id, selected.tracking_id);
                                 }}
-                             >
-                                <option value="">+ SELECT FUEL PO TO LINK</option>
+                              >
+                                <option value="">+ Link Fuel PO (Optional)</option>
                                 {availableFuelSlips.map(slip => (
                                     <option key={slip.id} value={slip.id}>{slip.tracking_id} ({slip.fuel_product})</option>
                                 ))}
-                             </select>
-                             <span className="text-[10px] text-gray-400 italic font-medium">One PO can be reused for multiple missions</span>
+                              </select>
                           </div>
                         )}
                       </div>
                     </div>
 
                     <div className="text-right ml-4 space-y-2">
-                       <div className="font-black text-gray-800 bg-gray-100 px-3 py-1.5 rounded-lg text-sm mb-2 shadow-inner uppercase">
+                        <div className="font-black text-gray-800 bg-gray-100 px-3 py-1.5 rounded-lg text-sm mb-2 shadow-inner uppercase">
                         {dispatch.ambulances?.call_sign || 'UNASSIGNED'}
                       </div>
                       <div className="text-[11px] font-bold text-gray-500 uppercase tracking-tight mb-4">{dispatch.drivers?.full_name || 'No Driver'}</div>
                       
-                      {/* --- CLOSE MISSION BUTTON --- */}
                       {dispatch.status !== 'Closed' && (
                         <button 
                           onClick={() => closeMission(dispatch.id)}
-                          className="bg-green-600 text-white text-[10px] font-black px-4 py-2 rounded-lg flex items-center hover:bg-green-700 w-full justify-center shadow-sm"
+                          className="bg-green-600 text-white text-[10px] font-black px-4 py-2 rounded-lg flex items-center hover:bg-green-700 w-full justify-center shadow-sm mb-2"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> CLOSE MISSION
                         </button>
@@ -333,7 +346,7 @@ export default function DispatchPage() {
           )}
         </div>
 
-        {/* --- RIGHT: FORM (Unchanged Registry Features) --- */}
+        {/* --- FORM PANEL --- */}
         <div className={`bg-white p-6 rounded-2xl shadow-2xl border-t-8 h-fit sticky top-8 ${isEditing ? 'border-orange-500' : 'border-blue-900'}`}>
           <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center uppercase tracking-tight">
             {isEditing ? 'Update Dispatch' : 'New Mission Entry'}
@@ -432,4 +445,12 @@ export default function DispatchPage() {
       </main>
     </div>
   )
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </svg>
+  );
 }
